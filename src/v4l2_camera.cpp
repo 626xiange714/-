@@ -28,13 +28,10 @@
 
 using namespace std::chrono_literals;
 
-namespace v4l2_camera
-{
+namespace v4l2_camera {
 
-V4L2Camera::V4L2Camera(rclcpp::NodeOptions const & options)
-: rclcpp::Node{"v4l2_camera", options},
-  canceled_{false}
-{
+V4L2Camera::V4L2Camera(rclcpp::NodeOptions const &options)
+    : rclcpp::Node{"v4l2_camera", options}, canceled_{false} {
   // Prepare publisher
   // This should happen before registering on_set_parameters_callback,
   // else transport plugins will fail to declare their parameters
@@ -49,13 +46,25 @@ V4L2Camera::V4L2Camera(rclcpp::NodeOptions const & options)
   auto device_descriptor = rcl_interfaces::msg::ParameterDescriptor{};
   device_descriptor.description = "Path to video device";
   device_descriptor.read_only = true;
-  auto device = declare_parameter<std::string>("video_device", "/dev/video0", device_descriptor);
-  camera_ = std::make_shared<V4l2CameraDevice>(device);
+  const auto cameras =
+      std::vector<std::string>{"/dev/video0", "/dev/video1", "/dev/video2",
+                               "/dev/video3", "/dev/video4"};
+  for (const auto &cam : cameras) {
+    auto device =
+        declare_parameter<std::string>("video_device", cam, device_descriptor);
+    camera_ = std::make_shared<V4l2CameraDevice>(device);
 
-  if (!camera_->open()) {
-    return;
+    if (camera_->open()) {
+
+      RCLCPP_INFO(get_logger(), "Opening device %s", cam.c_str());
+      break;
+    }
   }
 
+  if (!camera_->open()) {
+    RCLCPP_WARN(get_logger(), "No camera device found. Exiting...");
+    return;
+  }
   cinfo_ = std::make_shared<camera_info_manager::CameraInfoManager>(this, camera_->getCameraName());
 
   // Read parameters and set up callback
@@ -504,6 +513,6 @@ bool V4L2Camera::checkCameraInfo(
   return ci.width == img.width && ci.height == img.height;
 }
 
-}  // namespace v4l2_camera
+} // namespace v4l2_camera
 
 RCLCPP_COMPONENTS_REGISTER_NODE(v4l2_camera::V4L2Camera)
